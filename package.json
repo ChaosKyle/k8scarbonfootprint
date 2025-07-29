@@ -1,0 +1,66 @@
+{
+  "name": "k8scarbonfootprint",
+  "version": "1.0.0",
+  "description": "A Grafana plugin for monitoring Kubernetes carbon footprint on cloud providers",
+  "main": "src/module.ts",
+  "scripts": {
+    "build": "grafana-toolkit plugin:build",
+    "test": "grafana-toolkit plugin:test",
+    "dev": "grafana-toolkit plugin:dev",
+    "watch": "grafana-toolkit plugin:dev --watch",
+    "sign": "grafana-toolkit plugin:sign",
+    "clean": "rimraf dist",
+    "lint": "eslint --cache --ignore-path ./.gitignore --ext .js,.jsx,.ts,.tsx ./src",
+    "lint:fix": "npm run lint -- --fix",
+    "typecheck": "tsc --noEmit",
+    "audit": "npm audit --audit-level moderate"
+  },
+  "keywords": [
+    "grafana",
+    "plugin",
+    "kubernetes",
+    "carbon",
+    "sustainability",
+    "co2",
+    "cloud",
+    "monitoring"
+  ],
+  "author": "ChaosKyle",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChaosKyle/k8scarbonfootprint.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ChaosKyle/k8scarbonfootprint/issues"
+  },
+  "homepage": "https://github.com/ChaosKyle/k8scarbonfootprint#readme",
+  "devDependencies": {
+    "@grafana/data": "^10.2.0",
+    "@grafana/runtime": "^10.2.0",
+    "@grafana/toolkit": "^10.2.0",
+    "@grafana/ui": "^10.2.0",
+    "@types/lodash": "^4.14.200",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.50.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "eslint-plugin-react": "^7.33.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "prettier": "^3.0.0",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.2.0"
+  },
+  "dependencies": {
+    "lodash": "^4.17.21",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}

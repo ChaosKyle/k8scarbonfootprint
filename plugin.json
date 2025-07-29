@@ -1,0 +1,89 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
+  "type": "app",
+  "name": "k8scarbonfootprint",
+  "id": "k8scarbonfootprint",
+  "info": {
+    "keywords": [
+      "kubernetes",
+      "carbon",
+      "sustainability",
+      "co2",
+      "cloud",
+      "monitoring"
+    ],
+    "description": "Monitor and visualize carbon footprint of Kubernetes workloads across cloud providers",
+    "author": {
+      "name": "ChaosKyle",
+      "url": "https://github.com/ChaosKyle"
+    },
+    "logos": {
+      "small": "img/logo.svg",
+      "large": "img/logo.svg"
+    },
+    "links": [
+      {
+        "name": "GitHub",
+        "url": "https://github.com/ChaosKyle/k8scarbonfootprint"
+      },
+      {
+        "name": "Documentation",
+        "url": "https://github.com/ChaosKyle/k8scarbonfootprint/wiki"
+      }
+    ],
+    "screenshots": [],
+    "version": "%VERSION%",
+    "updated": "%TODAY%"
+  },
+  "includes": [
+    {
+      "type": "datasource",
+      "name": "K8s Carbon Footprint",
+      "id": "k8scarbonfootprint-datasource"
+    },
+    {
+      "type": "panel",
+      "name": "Carbon Gauge",
+      "id": "k8scarbonfootprint-carbon-gauge"
+    },
+    {
+      "type": "panel",
+      "name": "Carbon Heatmap",
+      "id": "k8scarbonfootprint-carbon-heatmap"
+    },
+    {
+      "type": "panel",
+      "name": "Carbon Treemap",
+      "id": "k8scarbonfootprint-carbon-treemap"
+    },
+    {
+      "type": "dashboard",
+      "name": "Executive Carbon Overview",
+      "path": "dashboards/executive-overview.json"
+    },
+    {
+      "type": "dashboard",
+      "name": "Technical Carbon Analysis",
+      "path": "dashboards/technical-analysis.json"
+    }
+  ],
+  "dependencies": {
+    "grafanaVersion": "10.0.x",
+    "plugins": []
+  },
+  "backend": true,
+  "executable": "k8scarbonfootprint",
+  "routes": [
+    {
+      "path": "api/*",
+      "method": "*",
+      "url": "{{ .JsonData.baseUrl }}",
+      "headers": [
+        {
+          "name": "Authorization",
+          "content": "Bearer {{ .SecureJsonData.apiToken }}"
+        }
+      ]
+    }
+  ]
+}
