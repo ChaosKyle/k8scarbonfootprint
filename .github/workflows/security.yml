@@ -1,0 +1,210 @@
+name: Security Monitoring
+
+on:
+  schedule:
+    # Run security scans daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Type of security scan to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - dependencies
+          - container
+          - secrets
+
+jobs:
+  dependency-audit:
+    name: Daily Dependency Audit
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'dependencies' || github.event.schedule
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit with JSON output
+        run: |
+          npm audit --json > npm-audit-results.json || true
+
+      - name: Check for high/critical vulnerabilities
+        run: |
+          CRITICAL=$(cat npm-audit-results.json | jq '.metadata.vulnerabilities.critical // 0')
+          HIGH=$(cat npm-audit-results.json | jq '.metadata.vulnerabilities.high // 0')
+          
+          echo "Critical vulnerabilities: $CRITICAL"
+          echo "High vulnerabilities: $HIGH"
+          
+          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+            echo "::error::Found $CRITICAL critical and $HIGH high severity vulnerabilities"
+            cat npm-audit-results.json | jq '.vulnerabilities'
+            exit 1
+          fi
+
+      - name: Run Go vulnerability check
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck -json ./... > go-vuln-results.json || true
+
+      - name: Upload vulnerability reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: vulnerability-reports
+          path: |
+            npm-audit-results.json
+            go-vuln-results.json
+
+  container-scan:
+    name: Daily Container Scan
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'container' || github.event.schedule
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t k8scarbonfootprint:security-scan .
+
+      - name: Scan with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'k8scarbonfootprint:security-scan'
+          format: 'json'
+          output: 'container-scan-results.json'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Check scan results
+        run: |
+          if [ -s container-scan-results.json ]; then
+            CRITICAL=$(cat container-scan-results.json | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length')
+            HIGH=$(cat container-scan-results.json | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length')
+            
+            echo "Critical vulnerabilities: $CRITICAL"
+            echo "High vulnerabilities: $HIGH"
+            
+            if [ "$CRITICAL" -gt 0 ]; then
+              echo "::error::Found $CRITICAL critical vulnerabilities in container image"
+              exit 1
+            fi
+          fi
+
+      - name: Upload container scan results
+        uses: actions/upload-artifact@v3
+        with:
+          name: container-scan-results
+          path: container-scan-results.json
+
+  secret-scan:
+    name: Secret Detection Scan
+    runs-on: ubuntu-latest
+    if: github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'secrets' || github.event.schedule
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run GitLeaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: false
+
+      - name: Run TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  security-notification:
+    name: Security Notification
+    runs-on: ubuntu-latest
+    needs: [dependency-audit, container-scan, secret-scan]
+    if: always() && (failure() || cancelled())
+    steps:
+      - name: Notify security team
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#security-alerts'
+          message: |
+            🚨 Security scan failed for k8scarbonfootprint
+            Repository: ${{ github.repository }}
+            Workflow: ${{ github.workflow }}
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  compliance-report:
+    name: Generate Compliance Report
+    runs-on: ubuntu-latest
+    needs: [dependency-audit, container-scan, secret-scan]
+    if: always()
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Generate compliance report
+        run: |
+          mkdir -p reports
+          echo "# Security Compliance Report" > reports/compliance-report.md
+          echo "Generated: $(date -u)" >> reports/compliance-report.md
+          echo "" >> reports/compliance-report.md
+          
+          echo "## Dependency Audit Results" >> reports/compliance-report.md
+          echo "Status: ${{ needs.dependency-audit.result }}" >> reports/compliance-report.md
+          echo "" >> reports/compliance-report.md
+          
+          echo "## Container Security Scan Results" >> reports/compliance-report.md
+          echo "Status: ${{ needs.container-scan.result }}" >> reports/compliance-report.md
+          echo "" >> reports/compliance-report.md
+          
+          echo "## Secret Detection Results" >> reports/compliance-report.md
+          echo "Status: ${{ needs.secret-scan.result }}" >> reports/compliance-report.md
+          echo "" >> reports/compliance-report.md
+          
+          if [ -f vulnerability-reports/npm-audit-results.json ]; then
+            echo "### NPM Vulnerabilities" >> reports/compliance-report.md
+            cat vulnerability-reports/npm-audit-results.json | jq -r '.metadata.vulnerabilities | to_entries[] | "- \(.key): \(.value)"' >> reports/compliance-report.md
+          fi
+
+      - name: Upload compliance report
+        uses: actions/upload-artifact@v3
+        with:
+          name: compliance-report
+          path: reports/
+
+      - name: Comment PR with security status
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('reports/compliance-report.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## 🔒 Security Compliance Report\n\n' + report
+            });
